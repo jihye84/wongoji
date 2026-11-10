@@ -166,6 +166,67 @@
 
   .toolbar button:hover { background: rgba(255,255,255,0.15); }
 
+  /* ---- 예문 고르기 메뉴 ---- */
+  .ex-wrap { position: relative; display: inline-flex; }
+  .example-menu {
+    display: none;
+    position: absolute;
+    top: calc(100% + 0.4rem);
+    left: 0;
+    z-index: 40;
+    width: max-content;
+    min-width: 15rem;
+    max-width: calc(100vw - 1rem);
+    background: var(--paper);
+    border-radius: 0.7rem;
+    padding: 0.6rem;
+    box-shadow: 0 1rem 2.5rem rgba(0,0,0,0.45);
+    font-family: var(--font-ui);
+    color: var(--ink);
+  }
+  .example-menu.open { display: block; }
+  .ex-head {
+    font-size: 0.85rem;
+    color: #6b746f;
+    padding: 0.2rem 0.5rem 0.5rem;
+  }
+  .toolbar .example-menu .ex-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    color: var(--ink);
+    background: #fff;
+    border: 1px solid var(--paper-edge);
+    border-radius: 0.5rem;
+    padding: 0.6rem 0.8rem;
+    margin-bottom: 0.4rem;
+  }
+  .toolbar .example-menu .ex-item:hover { background: rgba(194, 59, 59, 0.07); border-color: var(--redpen); }
+  .ex-item b { display: block; font-size: 1.05rem; }
+  .ex-item small { color: #6b746f; font-weight: 400; font-size: 0.85rem; }
+  .ex-speed {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.3rem 0.2rem 0.1rem;
+    font-size: 0.85rem;
+    color: #6b746f;
+  }
+  .ex-speed span { margin-right: 0.3rem; }
+  .toolbar .example-menu .ex-speed button {
+    padding: 0.35rem 0.7rem;
+    font-size: 0.85rem;
+    color: var(--ink);
+    background: #fff;
+    border: 1px solid var(--paper-edge);
+    border-radius: 0.4rem;
+  }
+  .toolbar .example-menu .ex-speed button.on {
+    background: var(--redpen);
+    border-color: var(--redpen-dark);
+    color: #fff8f4;
+  }
+
   .toolbar .rows-picker {
     display: inline-flex;
     align-items: center;
@@ -612,7 +673,18 @@
           <option value="space">띄어 쓰기</option>
         </select>
       </label>
-      <button type="button" id="exampleBtn">예문 보기</button>
+      <div class="ex-wrap">
+        <button type="button" id="exampleBtn" aria-haspopup="true" aria-expanded="false">예문 보기 ▾</button>
+        <div class="example-menu" id="exampleMenu">
+          <div class="ex-head">예문을 고르면 한 글자씩 써져요</div>
+          <div class="ex-list"></div>
+          <div class="ex-speed"><span>빠르기</span>
+            <button type="button" data-speed="slow">천천히</button>
+            <button type="button" data-speed="normal">보통</button>
+            <button type="button" data-speed="fast">빠르게</button>
+          </div>
+        </div>
+      </div>
       <button type="button" id="clearBtn">전체 지우기</button>
       <button type="button" id="fullscreenBtn">전체화면</button>
       <button type="button" id="printBtn" class="primary">인쇄하기</button>
@@ -1276,33 +1348,97 @@
 
     printBtn.addEventListener('click', handlePrint);
 
-    // ---- 예문 보기: 원고지 규칙이 모두 담긴 예문을 한 글자씩 써 보인다 ----
-    var EXAMPLE_TITLE = '오이샐러드';
-    var EXAMPLE_TEXT = [
-      ' 11시 25분, 급식에 오이샐러드가 나왔다. 초록색 오이들이 맛없어 보였다.',
-      ' ‘으…… 먹기 싫다.’',
-      ' 그때 짝꿍인 민지가 말했다.',
-      ' “먹어 봐. 맛있어!”',
-      ' 나는 용기를 내어 한 입 먹어 보았다. 어떤 맛일까? 아삭아삭하고 새콤달콤했다. 나도 모르게 소리쳤다.',
-      ' “와, 맛있다.”',
-      ' ‘다음에도 꼭 먹어야지!’'
-    ].join('\n');
-    var EXAMPLE_ROWS = 12;
-    var STEP_MS = 160;       // 한 글자가 나타나는 간격
+    // ---- 예문 보기: 원고지 규칙이 모두 담긴 예문을 골라 한 글자씩 써 보인다 ----
+    // (예문은 '마침표·쉼표 뒤: 붙여 쓰기' 설정에 맞춰 규칙이 제자리에 오도록 짰다)
+    var EXAMPLES = [
+      { title: '오이샐러드', note: '급식 시간', rows: 12, text: [
+        ' 11시 25분, 급식에 오이샐러드가 나왔다. 초록색 오이들이 맛없어 보였다.',
+        ' ‘으…… 먹기 싫다.’',
+        ' 그때 짝꿍인 민지가 말했다.',
+        ' “먹어 봐. 맛있어!”',
+        ' 나는 용기를 내어 한 입 먹어 보았다. 어떤 맛일까? 아삭아삭하고 새콤달콤했다. 나도 모르게 소리쳤다.',
+        ' “와, 맛있다.”',
+        ' ‘다음에도 꼭 먹어야지!’'
+      ] },
+      { title: '비 오는 날', note: '우산 같이 쓰기', rows: 11, text: [
+        ' 8시 40분, 비가 주룩주룩 내렸다. 내 우산에는 hello라고 쓰여 있다. 교문 앞에 우산이 없는 친구가 서 있었다.',
+        ' ‘어쩌지…… 같이 쓸까?’',
+        ' 나는 친구에게 말했다.',
+        ' “같이 쓰자!”',
+        ' “고마워.”',
+        ' 우리 둘은 한 우산을 함께 쓰고 걸어갔다. 어깨는 젖었지만 마음은 따뜻했다.'
+      ] },
+      { title: '이가 빠진 날', note: '앞니가 쑥', rows: 11, text: [
+        ' 오늘 아침, 밥을 먹다가 앞니가 쑥 빠졌다. 피가 나서 깜짝 놀랐다.',
+        ' ‘이가 다시 날까?’',
+        ' 엄마가 웃으면서 말씀하셨다.',
+        ' “새 이가 날 거야.”',
+        ' 학교에서 친구들에게 빠진 이를 보여 주었다. 우리 반 25명 중에 벌써 12명이 이가 빠졌다. 나도 이제 형님이 된 것 같다…… 정말 신기하다!'
+      ] }
+    ];
+    EXAMPLES.forEach(function (ex) { ex.full = ex.text.join('\n'); });
+    var SPEEDS = { slow: 320, normal: 160, fast: 70 };   // 한 글자가 나타나는 간격(ms)
+    var stepMs = SPEEDS.normal;
+    try { var sp = localStorage.getItem('wongoji-speed'); if (SPEEDS[sp]) stepMs = SPEEDS[sp]; } catch (e) {}
+
     var exampleBtn = document.getElementById('exampleBtn');
-    var playTimer = null, playPos = 0, prevBeforeExample = '';
+    var exampleMenu = document.getElementById('exampleMenu');
+    var playTimer = null, playPos = 0, prevBeforeExample = '', currentEx = null;
+
+    // 예문 고르기 메뉴 만들기
+    EXAMPLES.forEach(function (ex, i) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'ex-item';
+      btn.innerHTML = '<b></b><small></small>';
+      btn.querySelector('b').textContent = (i + 1) + '. ' + ex.title;
+      btn.querySelector('small').textContent = ex.note;
+      btn.addEventListener('click', function () { closeExampleMenu(); startExample(ex); });
+      exampleMenu.querySelector('.ex-list').appendChild(btn);
+    });
+    Array.prototype.forEach.call(exampleMenu.querySelectorAll('.ex-speed button'), function (b) {
+      b.classList.toggle('on', SPEEDS[b.getAttribute('data-speed')] === stepMs);
+      b.addEventListener('click', function () {
+        stepMs = SPEEDS[b.getAttribute('data-speed')];
+        try { localStorage.setItem('wongoji-speed', b.getAttribute('data-speed')); } catch (e) {}
+        Array.prototype.forEach.call(exampleMenu.querySelectorAll('.ex-speed button'), function (o) {
+          o.classList.toggle('on', o === b);
+        });
+      });
+    });
+    function openExampleMenu() {
+      exampleMenu.classList.add('open');
+      // 좁은 화면에서 메뉴가 화면 밖으로 나가지 않게 왼쪽으로 당긴다.
+      exampleMenu.style.left = '0px';
+      var mr = exampleMenu.getBoundingClientRect();
+      if (mr.right > window.innerWidth - 8) {
+        exampleMenu.style.left = Math.round(window.innerWidth - 8 - mr.right) + 'px';
+      }
+      exampleBtn.setAttribute('aria-expanded', 'true');
+    }
+    function closeExampleMenu() {
+      exampleMenu.classList.remove('open');
+      exampleBtn.setAttribute('aria-expanded', 'false');
+    }
+    document.addEventListener('click', function (e) {
+      if (exampleMenu.classList.contains('open') && !exampleMenu.contains(e.target) && e.target !== exampleBtn) closeExampleMenu();
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') closeExampleMenu();
+    });
 
     function finishExample() {
       clearTimeout(playTimer);
       playTimer = null;
       typer.readOnly = false;
-      typer.value = EXAMPLE_TEXT;
+      typer.value = currentEx.full;
       typer.setSelectionRange(typer.value.length, typer.value.length);
-      exampleBtn.textContent = '예문 보기';
+      exampleBtn.textContent = '예문 보기 ▾';
       saveNow();
       recompute();
       // 쓰던 글이 있었다면 잠깐 동안 '되돌리기'로 되찾을 수 있게 한다.
-      if (prevBeforeExample && prevBeforeExample !== EXAMPLE_TEXT) {
+      var wasExample = EXAMPLES.some(function (ex) { return ex.full === prevBeforeExample; });
+      if (prevBeforeExample && !wasExample) {
         undoText = prevBeforeExample;
         clearBtn.textContent = '↶ 되돌리기';
         clearTimeout(undoTimer);
@@ -1313,26 +1449,29 @@
       }
     }
     function stepExample() {
+      var full = currentEx.full;
       // 띄어쓰기와 줄 바꿈은 기다리지 않고 다음 글자와 함께 나타낸다.
       playPos++;
-      while (playPos < EXAMPLE_TEXT.length && /[ \n]/.test(EXAMPLE_TEXT[playPos - 1])) playPos++;
-      typer.value = EXAMPLE_TEXT.slice(0, playPos);
+      while (playPos < full.length && /[ \n]/.test(full[playPos - 1])) playPos++;
+      typer.value = full.slice(0, playPos);
       typer.setSelectionRange(playPos, playPos);
       recompute();
-      if (playPos >= EXAMPLE_TEXT.length) { finishExample(); return; }
-      playTimer = setTimeout(stepExample, STEP_MS);
+      if (playPos >= full.length) { finishExample(); return; }
+      playTimer = setTimeout(stepExample, stepMs);
     }
-    exampleBtn.addEventListener('click', function () {
-      if (playTimer) { finishExample(); return; }   // 재생 중에 누르면 바로 끝까지 보여 준다
+    function startExample(ex) {
+      currentEx = ex;
       prevBeforeExample = typer.value;
-      if (TOTAL_ROWS < EXAMPLE_ROWS) {
-        TOTAL_ROWS = EXAMPLE_ROWS;
+      if (TOTAL_ROWS < ex.rows) {
+        TOTAL_ROWS = ex.rows;
         rowsSelect.value = String(TOTAL_ROWS);
         try { localStorage.setItem('wongoji-rows', String(TOTAL_ROWS)); } catch (e) {}
         buildGrid();
         fitGrid();
       }
-      if (!titleInput.value) titleInput.value = EXAMPLE_TITLE;
+      // 제목이 비어 있거나 다른 예문 제목이면 이 예문 제목으로 바꾼다.
+      var isExTitle = EXAMPLES.some(function (e2) { return e2.title === titleInput.value; });
+      if (!titleInput.value || isExTitle) titleInput.value = ex.title;
       typer.value = '';
       typer.readOnly = true;
       typer.focus();
@@ -1340,7 +1479,12 @@
       playPos = 0;
       exampleBtn.textContent = '■ 바로 보기';
       recompute();
-      playTimer = setTimeout(stepExample, STEP_MS);
+      playTimer = setTimeout(stepExample, stepMs);
+    }
+    exampleBtn.addEventListener('click', function () {
+      if (playTimer) { finishExample(); return; }   // 재생 중에 누르면 바로 끝까지 보여 준다
+      if (exampleMenu.classList.contains('open')) closeExampleMenu();
+      else openExampleMenu();
     });
 
     fullscreenBtn.addEventListener('click', function () {
