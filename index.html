@@ -1,0 +1,1366 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>원고지 칠판</title>
+<script>
+  // 카카오톡·페이스북·네이버 등 인앱 브라우저에서 열면 기본 브라우저로 다시 연다.
+  (function () {
+    var ua = navigator.userAgent || '';
+    var url = location.href;
+    if (!/KAKAOTALK|FBAN|FBAV|FB_IAB|Instagram|NAVER\(inapp|Line\/|DaumApps|everytimeApp|wv\)/i.test(ua)) return;
+    if (/KAKAOTALK/i.test(ua)) {
+      location.href = 'kakaotalk://web/openExternal?url=' + encodeURIComponent(url);
+      return;
+    }
+    if (/Line\//i.test(ua)) {
+      location.href = url + (url.indexOf('?') === -1 ? '?' : '&') + 'openExternalBrowser=1';
+      return;
+    }
+    if (/Android/i.test(ua)) {
+      location.href = 'intent://' + url.replace(/^https?:\/\//, '') +
+        '#Intent;scheme=' + location.protocol.replace(':', '') + ';package=com.android.chrome;end';
+      return;
+    }
+    document.addEventListener('DOMContentLoaded', function () {
+      var bar = document.createElement('div');
+      bar.textContent = '오른쪽 위 ⋯ 메뉴에서 "Safari로 열기"를 눌러 주세요.';
+      bar.style.cssText = 'position:fixed;left:0;right:0;top:0;z-index:99;padding:0.8rem;text-align:center;background:#c23b3b;color:#fff;font:700 1rem sans-serif;';
+      document.body.appendChild(bar);
+    });
+  })();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link
+  rel="stylesheet"
+  href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=Gowun+Dodum&family=Poppins:wght@700&display=swap"
+/>
+<style>
+  :root {
+    --cell: 3rem;
+    --board-1: #1f3e30;
+    --board-2: #12241c;
+    --board-edge: #0b1712;
+    --paper: #fcfbf6;
+    --paper-edge: #e9e6d9;
+    --grid-line: #4d7a5f;
+    --ink: #202a28;
+    --ink-faint: #9aa39d;
+    --redpen: #c23b3b;
+    --redpen-dark: #9c2c2c;
+    --label: #d7e4da;
+    --label-dim: #9db6a8;
+
+    --font-ink: "Gowun Batang", "Nanum Myeongjo", "Noto Serif KR", serif;
+    --font-ui: "Gowun Dodum", "Noto Sans KR", "Apple SD Gothic Neo", sans-serif;
+    --font-geo: "Poppins", "Century Gothic", "Futura", sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+  }
+
+  body {
+    background: var(--board-2);
+    color: var(--ink);
+    font-family: var(--font-ui);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .board {
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: clamp(1rem, 2.4vh, 2.2rem);
+    padding: clamp(1rem, 3vh, 2.5rem) clamp(1rem, 3vw, 3rem);
+    background:
+      radial-gradient(ellipse at 50% -10%, rgba(255,255,255,0.06), transparent 55%),
+      linear-gradient(160deg, var(--board-1), var(--board-2) 70%);
+    box-shadow: inset 0 0 14vw rgba(0,0,0,0.35);
+  }
+
+  .titlebar {
+    width: 100%;
+    max-width: 1400px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .title-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: 74%;
+    font-family: var(--font-ink);
+    font-weight: 700;
+    font-size: clamp(1.4rem, 4.4vw, 3.2rem);
+    color: var(--ink);
+    letter-spacing: 0.02em;
+    background: var(--paper);
+    border: 1px solid var(--paper-edge);
+    border-radius: 0.4rem;
+    padding: 0.15em 0.5em;
+    box-shadow: 0 0.5rem 1.2rem rgba(0, 0, 0, 0.28), 0 0 0 1px rgba(0, 0, 0, 0.04);
+  }
+
+  .title-input::placeholder {
+    color: var(--ink-faint);
+    font-weight: 400;
+  }
+
+  .title-input:hover {
+    box-shadow: 0 0.5rem 1.2rem rgba(0, 0, 0, 0.34), 0 0 0 1px rgba(0, 0, 0, 0.04);
+  }
+
+  .title-input:focus {
+    outline: none;
+    border-color: var(--redpen);
+    box-shadow: 0 0.5rem 1.2rem rgba(0, 0, 0, 0.28), 0 0 0 3px rgba(194, 59, 59, 0.22);
+  }
+
+  .titlebar .meta {
+    flex: 0 0 auto;
+    font-family: var(--font-ink);
+    font-weight: 700;
+    font-size: clamp(1.4rem, 4.4vw, 3.2rem);
+    color: var(--label);
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+  }
+
+  .titlebar .meta .weekday-char {
+    font-size: calc(1em + 3pt);
+  }
+
+  .toolbar {
+    width: 100%;
+    max-width: 1400px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+  }
+
+  .toolbar button {
+    font-family: var(--font-ui);
+    font-size: clamp(0.85rem, 1.3vw, 1.05rem);
+    font-weight: 700;
+    border: none;
+    border-radius: 0.6rem;
+    padding: 0.75rem 1.3rem;
+    cursor: pointer;
+    color: var(--label);
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.14);
+    transition: background 120ms ease, transform 80ms ease;
+  }
+
+  .toolbar button:hover { background: rgba(255,255,255,0.15); }
+
+  .toolbar .rows-picker {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-family: var(--font-ui);
+    font-size: clamp(0.85rem, 1.3vw, 1.05rem);
+    font-weight: 700;
+    color: var(--label);
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 0.6rem;
+    padding: 0.35rem 0.5rem 0.35rem 1rem;
+  }
+  .toolbar .rows-picker select {
+    font: inherit;
+    color: var(--ink);
+    background: var(--paper);
+    border: none;
+    border-radius: 0.4rem;
+    padding: 0.4rem 0.5rem;
+    cursor: pointer;
+  }
+  .toolbar .rows-picker select:focus-visible {
+    outline: 3px solid var(--redpen);
+    outline-offset: 2px;
+  }
+  .toolbar button:active { transform: translateY(1px); }
+
+  .toolbar button.primary {
+    background: var(--redpen);
+    border-color: var(--redpen-dark);
+    color: #fff8f4;
+  }
+  .toolbar button.primary:hover { background: var(--redpen-dark); }
+
+  button:focus-visible,
+  textarea:focus-visible {
+    outline: 3px solid var(--redpen);
+    outline-offset: 2px;
+  }
+
+  .paper-wrap {
+    width: 100%;
+    max-width: 1400px;
+    flex: 1 1 0%;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .paper {
+    width: auto;
+    background: var(--paper);
+    border: 1px solid var(--paper-edge);
+    border-radius: 0.4rem;
+    padding: clamp(0.8rem, 2.2vw, 2rem);
+    box-shadow: 0 1.2rem 3rem rgba(0,0,0,0.35), 0 0 0 1px rgba(0,0,0,0.04);
+    cursor: text;
+  }
+
+  .paper-row {
+    display: flex;
+    align-items: stretch;
+    gap: clamp(0.4rem, 1.2vw, 1rem);
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(15, var(--cell));
+    grid-template-rows: repeat(var(--rows, 5), var(--cell));
+    flex: none;
+    border-top: 1.5px solid var(--grid-line);
+    border-left: 1.5px solid var(--grid-line);
+  }
+
+  .vmarks {
+    flex: 0 0 auto;
+    width: calc(var(--cell) * 0.6);
+    display: flex;
+    flex-direction: column;
+  }
+
+  .vmarks .vrow {
+    flex: 1;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .vmarks .vrow span.vmark {
+    font-family: var(--font-geo);
+    font-style: normal;
+    font-weight: 700;
+    color: var(--redpen);
+    font-size: calc(var(--cell) * 0.42);
+    line-height: 1;
+  }
+  /* 줄 첫머리에 올 뻔한 문장 부호를 칸 밖(오른쪽 여백)에 칸 안과 같은 모양으로 찍는 자리 */
+  .vmarks .cell.mcell {
+    position: absolute;
+    inset: 0;
+    border: none !important;
+    background: none;
+  }
+
+  .cell {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-ink);
+    font-weight: 700;
+    color: var(--ink);
+    line-height: 1;
+    user-select: none;
+    border-right: 1.5px solid var(--grid-line);
+    border-bottom: 1.5px solid var(--grid-line);
+    font-size: calc(var(--cell) * 0.64);
+  }
+
+  /* 마침표는 칸 정가운데가 아니라, 국어 교과서 원고지 표기법대로
+     칸의 왼쪽 아래 1/4 영역 가운데에 찍는다. 글꼴의 마침표 글자는
+     폰트마다 실제 잉크 위치가 글자상자 중앙과 어긋나므로, 대신 크기가
+     고정된 원을 직접 그려서 정확한 위치에 놓는다. */
+  .cell .aux { display: none; }
+  /* 쉼표도 마침표처럼 칸의 왼쪽 아래에 */
+  .cell.comma .aux {
+    display: block;
+    position: absolute;
+    left: 14%;
+    bottom: 4%;
+    line-height: 1;
+  }
+  /* 여는 따옴표는 칸의 오른쪽 위, 닫는 따옴표는 왼쪽 위 */
+  .cell.q-tr .main {
+    position: absolute;
+    right: 10%;
+    top: 8%;
+  }
+  .cell.q-tl .main {
+    position: absolute;
+    left: 10%;
+    top: 8%;
+  }
+  /* 숫자·영어 소문자 두 자를 한 칸에 */
+  .cell.pair .main {
+    font-size: calc(var(--cell) * 0.46);
+    letter-spacing: -0.03em;
+  }
+  .cell.ell .main {
+    font-size: calc(var(--cell) * 0.5);
+  }
+  .cell.selected {
+    background: rgba(194, 59, 59, 0.18);
+    box-shadow: inset 0 0 0 2px var(--redpen);
+  }
+  .grid .cell, .vmarks .vrow { cursor: pointer; }
+  .cell.period::after {
+    content: "";
+    position: absolute;
+    left: 25%;
+    top: 75%;
+    transform: translate(-50%, -50%);
+    width: 0.15em;
+    height: 0.15em;
+    border-radius: 50%;
+    background: var(--ink);
+  }
+
+  .cell.cursor {
+    background: rgba(194, 59, 59, 0.07);
+  }
+  .cell.cursor::before {
+    content: "";
+    position: absolute;
+    left: 8%;
+    top: 16%;
+    bottom: 16%;
+    width: 2px;
+    background: var(--redpen);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .cell.cursor::before {
+      animation: blink 1.1s steps(1) infinite;
+    }
+  }
+  @keyframes blink {
+    0%, 49% { opacity: 1; }
+    50%, 100% { opacity: 0; }
+  }
+
+  .inputbar {
+    width: 100%;
+    max-width: 1400px;
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    background: rgba(0,0,0,0.22);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 0.6rem;
+    padding: 0.7rem 1rem;
+  }
+
+  .inputbar label {
+    flex: none;
+    font-size: clamp(0.8rem, 1.2vw, 0.95rem);
+    color: var(--label-dim);
+    white-space: nowrap;
+  }
+
+  .inputbar textarea {
+    flex: 1;
+    resize: none;
+    height: 2.6rem;
+    border: none;
+    border-radius: 0.4rem;
+    padding: 0.5rem 0.7rem;
+    background: rgba(255,255,255,0.94);
+    color: var(--ink);
+    font-family: var(--font-ink);
+    font-size: clamp(1rem, 1.6vw, 1.25rem);
+  }
+
+  .inputbar .counter {
+    flex: none;
+    font-family: var(--font-ui);
+    font-variant-numeric: tabular-nums;
+    font-size: clamp(0.85rem, 1.2vw, 1rem);
+    color: var(--label-dim);
+    min-width: 4.2em;
+    text-align: right;
+  }
+
+  .hint {
+    width: 100%;
+    max-width: 1400px;
+    font-size: clamp(0.72rem, 1vw, 0.85rem);
+    color: var(--label-dim);
+    margin-top: -0.4rem;
+  }
+
+  /* ---- 화면 보기: 칸 크기 고정 + 원고지만 스크롤 ---- */
+  .paper-wrap.scroll {
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+    align-items: flex-start;
+  }
+  .paper-wrap.scroll .paper { margin-block: auto; }
+
+  /* ---- 인쇄 설정 창 ---- */
+  .print-dialog {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.55);
+    padding: 1rem;
+  }
+  .print-dialog.open { display: flex; }
+  .print-card {
+    width: min(34rem, 100%);
+    max-height: 100%;
+    overflow-y: auto;
+    background: var(--paper);
+    color: var(--ink);
+    border-radius: 0.8rem;
+    padding: clamp(1rem, 3vh, 1.8rem) clamp(1rem, 3vw, 1.8rem);
+    box-shadow: 0 1.5rem 4rem rgba(0,0,0,0.45);
+    font-family: var(--font-ui);
+  }
+  .print-card h2 {
+    margin: 0 0 1rem;
+    font-family: var(--font-ink);
+    font-size: clamp(1.2rem, 2.4vw, 1.6rem);
+  }
+  .print-card fieldset {
+    border: none;
+    margin: 0 0 1rem;
+    padding: 0;
+  }
+  .print-card legend {
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+    color: var(--redpen-dark);
+  }
+  .choice-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.6rem;
+  }
+  .choice {
+    position: relative;
+    display: block;
+    cursor: pointer;
+  }
+  .choice input {
+    position: absolute;
+    opacity: 0;
+  }
+  .choice span {
+    display: block;
+    height: 100%;
+    border: 2px solid var(--paper-edge);
+    border-radius: 0.6rem;
+    padding: 0.7rem 0.8rem;
+    background: #fff;
+    line-height: 1.4;
+  }
+  .choice span b {
+    display: block;
+    font-size: 1.05rem;
+  }
+  .choice span small {
+    color: #6b746f;
+    font-size: 0.85rem;
+  }
+  .choice input:checked + span {
+    border-color: var(--redpen);
+    background: rgba(194, 59, 59, 0.06);
+  }
+  .choice input:focus-visible + span {
+    outline: 3px solid var(--redpen);
+    outline-offset: 2px;
+  }
+  .print-summary {
+    margin: 0.2rem 0 1.2rem;
+    padding: 0.7rem 0.9rem;
+    border-radius: 0.5rem;
+    background: #eef2ee;
+    font-size: 0.95rem;
+  }
+  .print-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.6rem;
+  }
+  .print-actions button {
+    font-family: var(--font-ui);
+    font-size: 1rem;
+    font-weight: 700;
+    border-radius: 0.6rem;
+    padding: 0.7rem 1.3rem;
+    cursor: pointer;
+    border: 1px solid var(--paper-edge);
+    background: #fff;
+    color: var(--ink);
+  }
+  .print-actions button.primary {
+    background: var(--redpen);
+    border-color: var(--redpen-dark);
+    color: #fff8f4;
+  }
+
+  /* ---- 인쇄 전용 화면 (인쇄할 때만 보인다) ---- */
+  #printView { display: none; }
+
+  @media print {
+    @page { margin: 15mm; }
+    html, body {
+      height: auto;
+      background: #fff;
+    }
+    .board, .print-dialog { display: none !important; }
+    #printView {
+      display: block;
+      color: #111;
+    }
+    .pv-page { break-after: page; page-break-after: always; }
+    .pv-page:last-child { break-after: auto; page-break-after: auto; }
+    .pv-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      height: 10mm;
+      margin-bottom: 4mm;
+      font-family: var(--font-ink);
+      font-weight: 700;
+    }
+    .pv-title { font-size: 16pt; }
+    .pv-date { font-size: 11pt; }
+    .pv-row {
+      display: flex;
+      justify-content: center;
+    }
+    .pv-row .grid {
+      border-top-color: #111;
+      border-left-color: #111;
+    }
+    .pv-row .cell {
+      border-right-color: #111;
+      border-bottom-color: #111;
+      color: #111;
+      background: none;
+    }
+    .pv-row .cell::before { display: none; }
+    .pv-row .cell.selected { box-shadow: none; background: none; }
+    .pv-row .cell.period::after {
+      background: #111 !important;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .pv-row .vmarks .vrow span.vmark { color: #111; }
+    /* 따라 쓰기 인쇄: 글자만 흐리게, 칸 선은 그대로 */
+    #printView.trace .cell { color: #b8b8b8; }
+    #printView.trace .vmarks .vrow span.vmark { color: #b8b8b8; }
+    #printView.trace .cell.period::after { background: #b8b8b8 !important; }
+  }
+</style>
+</head>
+<body>
+  <div class="board">
+    <div class="titlebar">
+      <input
+        type="text"
+        id="titleInput"
+        class="title-input"
+        placeholder="제목을 입력하세요"
+        autocomplete="off"
+        autocorrect="off"
+        autocapitalize="off"
+        spellcheck="false"
+        lang="ko"
+      />
+      <span class="meta" id="todayDate"></span>
+    </div>
+
+    <div class="toolbar no-print">
+      <label class="rows-picker" for="rowsSelect">원고지 줄 수
+        <select id="rowsSelect"></select>
+      </label>
+      <label class="rows-picker" for="viewSelect">화면 보기
+        <select id="viewSelect">
+          <option value="fit">한 화면에 맞추기</option>
+          <option value="scroll">칸 크기 고정 (스크롤)</option>
+        </select>
+      </label>
+      <label class="rows-picker" for="punctSelect">마침표·쉼표 뒤
+        <select id="punctSelect">
+          <option value="attach">붙여 쓰기</option>
+          <option value="space">띄어 쓰기</option>
+        </select>
+      </label>
+      <button type="button" id="exampleBtn">예문 보기</button>
+      <button type="button" id="clearBtn">전체 지우기</button>
+      <button type="button" id="fullscreenBtn">전체화면</button>
+      <button type="button" id="printBtn" class="primary">인쇄하기</button>
+    </div>
+
+    <div class="paper-wrap">
+      <div class="paper" id="paper">
+        <div class="paper-row">
+          <div class="grid" id="grid"></div>
+          <div class="vmarks" id="vmarks"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="inputbar no-print">
+      <label for="typer">✏️ 선생님 입력창</label>
+      <textarea
+        id="typer"
+        rows="1"
+        autocomplete="off"
+        autocorrect="off"
+        autocapitalize="off"
+        spellcheck="false"
+        lang="ko"
+      ></textarea>
+      <span class="counter" id="counter">0/75</span>
+    </div>
+    <div class="hint no-print">Enter 키를 누르면 다음 줄로 이동해요 · 원고지 칸을 누르면 그 글자를 바로 고칠 수 있어요 · 쓴 글은 저절로 저장돼요</div>
+  </div>
+
+<div class="print-dialog" id="printDialog" role="dialog" aria-modal="true" aria-labelledby="printDialogTitle">
+    <div class="print-card">
+      <h2 id="printDialogTitle">어떻게 인쇄할까요?</h2>
+      <fieldset>
+        <legend>크기 맞추기</legend>
+        <div class="choice-row">
+          <label class="choice"><input type="radio" name="pfit" value="width" />
+            <span><b>가로폭 맞춤</b><small>칸을 크게,<br />줄이 많으면 여러 장</small></span></label>
+          <label class="choice"><input type="radio" name="pfit" value="one" />
+            <span><b>한 장에 다 넣기</b><small>칸을 줄여서<br />한 장에 모두</small></span></label>
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend>용지 방향</legend>
+        <div class="choice-row">
+          <label class="choice"><input type="radio" name="porient" value="landscape" />
+            <span><b>가로</b><small>A4 가로</small></span></label>
+          <label class="choice"><input type="radio" name="porient" value="portrait" />
+            <span><b>세로</b><small>A4 세로</small></span></label>
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend>글씨</legend>
+        <div class="choice-row">
+          <label class="choice"><input type="radio" name="pink" value="dark" />
+            <span><b>진하게</b><small>보통 인쇄</small></span></label>
+          <label class="choice"><input type="radio" name="pink" value="trace" />
+            <span><b>흐리게</b><small>따라 쓰기 연습용</small></span></label>
+        </div>
+      </fieldset>
+      <div class="print-summary" id="printSummary"></div>
+      <div class="print-actions">
+        <button type="button" id="printCancel">취소</button>
+        <button type="button" id="printGo" class="primary">인쇄하기</button>
+      </div>
+    </div>
+  </div>
+  <div id="printView"></div>
+
+<script>
+  (function () {
+    var TOTAL_COLS = 15;
+    var MIN_ROWS = 3, MAX_ROWS = 12, DEFAULT_ROWS = 5;
+    var TOTAL_ROWS = DEFAULT_ROWS;
+    try {
+      var savedRows = parseInt(localStorage.getItem('wongoji-rows'), 10);
+      if (savedRows >= MIN_ROWS && savedRows <= MAX_ROWS) TOTAL_ROWS = savedRows;
+    } catch (e) {}
+    var TOTAL = TOTAL_COLS * TOTAL_ROWS;
+    var rowsSelect = document.getElementById('rowsSelect');
+    for (var ro = MIN_ROWS; ro <= MAX_ROWS; ro++) {
+      var opt = document.createElement('option');
+      opt.value = String(ro);
+      opt.textContent = ro + '줄';
+      rowsSelect.appendChild(opt);
+    }
+    rowsSelect.value = String(TOTAL_ROWS);
+    // 인쇄할 때 칸 크기: A4 가로 한 장(여백 포함)에 줄 수만큼 들어가게 정한다.
+    var printStyle = document.createElement('style');
+    document.head.appendChild(printStyle);
+
+    var gridEl = document.getElementById('grid');
+    var typer = document.getElementById('typer');
+    var counterEl = document.getElementById('counter');
+    var paperEl = document.getElementById('paper');
+    var clearBtn = document.getElementById('clearBtn');
+    var printBtn = document.getElementById('printBtn');
+    var fullscreenBtn = document.getElementById('fullscreenBtn');
+    var todayDateEl = document.getElementById('todayDate');
+    var titleInput = document.getElementById('titleInput');
+    var vmarksEl = document.getElementById('vmarks');
+    var vmarkBoxes = [];
+    var vmarkRows = [];
+    var cells = [];
+    function buildGrid() {
+    TOTAL = TOTAL_COLS * TOTAL_ROWS;
+    vmarksEl.innerHTML = '';
+    gridEl.innerHTML = '';
+    vmarkBoxes = [];
+    vmarkRows = [];
+    cells = [];
+    document.documentElement.style.setProperty('--rows', String(TOTAL_ROWS));
+    for (var vr = 0; vr < TOTAL_ROWS; vr++) {
+      var vrow = document.createElement('div');
+      vrow.className = 'vrow';
+      vrow.setAttribute('data-row', String(vr));
+      var vspan = document.createElement('span');
+      vspan.className = 'vmark';
+      vrow.appendChild(vspan);
+      // 칸 밖에 찍는 문장 부호도 칸 안과 똑같은 모양으로 그리기 위한 자리
+      var mcell = makeCellEl();
+      mcell.el.classList.add('mcell');
+      vrow.appendChild(mcell.el);
+      vmarksEl.appendChild(vrow);
+      vmarkBoxes.push(vrow);
+      vmarkRows.push({ v: vspan, m: mcell });
+    }
+    for (var i = 0; i < TOTAL; i++) {
+      var co = makeCellEl();
+      co.el.setAttribute('data-idx', String(i));
+      gridEl.appendChild(co.el);
+      cells.push(co);
+    }
+    }
+    function makeCellEl() {
+      var el = document.createElement('div');
+      el.className = 'cell';
+      var span = document.createElement('span');
+      span.className = 'main';
+      var aux = document.createElement('span');
+      aux.className = 'aux';
+      el.appendChild(span);
+      el.appendChild(aux);
+      return { el: el, span: span, aux: aux };
+    }
+    // 줄 첫머리에 오면 안 되는 문장 부호 (원고지에서는 앞줄 칸 밖에 찍는다)
+
+    // 어떤 창 크기에서도 스크롤 없이 원고지 전체가 보이도록
+    // 남은 공간에 맞춰 칸 크기를 계산한다.
+    var paperWrapEl = document.querySelector('.paper-wrap');
+    var VIEW_MODE = 'fit';
+    try { if (localStorage.getItem('wongoji-view') === 'scroll') VIEW_MODE = 'scroll'; } catch (e) {}
+    var viewSelect = document.getElementById('viewSelect');
+    viewSelect.value = VIEW_MODE;
+    function fitGrid() {
+      paperWrapEl.classList.toggle('scroll', VIEW_MODE === 'scroll');
+      var cs = getComputedStyle(paperEl);
+      var padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight) + 2;
+      var padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom) + 2;
+      var gap = parseFloat(getComputedStyle(paperEl.querySelector('.paper-row')).columnGap) || 0;
+      var w = paperWrapEl.clientWidth - padX - gap - 2;
+      var h = paperWrapEl.clientHeight - padY - 2;
+      // 한 화면에 맞추기: 모든 줄이 화면에 들어가게 칸을 줄인다.
+      // 칸 크기 고정: 줄 수와 상관없이 칸 크기를 그대로 두고 원고지만 스크롤한다.
+      var rowsToFit = VIEW_MODE === 'scroll' ? 3 : TOTAL_ROWS;
+      var cell = Math.floor(Math.min(w / (TOTAL_COLS + 0.6), h / rowsToFit));
+      if (cell < 12) cell = 12;
+      document.documentElement.style.setProperty('--cell', cell + 'px');
+    }
+    window.addEventListener('resize', fitGrid);
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitGrid);
+    buildGrid();
+    fitGrid();
+
+    (function setToday() {
+      var WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
+      var now = new Date();
+      var prefix = now.getFullYear() + '년 ' + (now.getMonth() + 1) + '월 ' + now.getDate() + '일 ';
+      todayDateEl.appendChild(document.createTextNode(prefix));
+      var weekdaySpan = document.createElement('span');
+      weekdaySpan.className = 'weekday-char';
+      weekdaySpan.textContent = WEEKDAYS[now.getDay()];
+      todayDateEl.appendChild(weekdaySpan);
+      todayDateEl.appendChild(document.createTextNode('요일'));
+    })();
+
+
+    var composing = false;
+    var isFocused = false;
+
+    // ---- 입력한 글을 원고지 칸 단위(토큰)로 나눈다 ----
+    // 원고지 규칙:
+    //  · 두 자리 이상의 아라비아 숫자, 영어 소문자는 한 칸에 두 자씩 (20|26, H|em|in|gw|ay)
+    //  · 마침표·쉼표 바로 뒤에 닫는 따옴표가 오면 한 칸에 함께 (.” ,”)
+    //  · 여는 따옴표는 칸의 오른쪽 위, 닫는 따옴표는 칸의 왼쪽 위
+    //  · 물음표·느낌표 다음에는 한 칸 띄운다
+    //  · 줄임표(…… / ... / ......)는 두 칸에 세 점씩
+    function tokenize(raw) {
+      var toks = [];
+      var dq = false, sq = false;
+      var i = 0;
+      function isCloseAt(j) {
+        var c = raw[j];
+        if (c === '”' || c === '’') return true;
+        if (c === '"') return dq;
+        if (c === "'") return sq;
+        return false;
+      }
+      while (i < raw.length) {
+        var ch = raw[i];
+        if (ch === '\r') { i++; continue; }
+        if (ch === '\n') { toks.push({ k: 'nl', s: i, e: i + 1 }); i++; continue; }
+        if (ch === ' ' || ch === '\t') { toks.push({ k: 'sp', s: i, e: i + 1 }); i++; continue; }
+        if (ch === '…' || (ch === '.' && raw[i + 1] === '.' && raw[i + 2] === '.')) {
+          var j = i;
+          while (j < raw.length && (raw[j] === '.' || raw[j] === '…')) j++;
+          toks.push({ k: 'ell', s: i, e: j });
+          i = j;
+          continue;
+        }
+        if (/[0-9]/.test(ch) || /[a-z]/.test(ch)) {
+          var re = /[0-9]/.test(ch) ? /[0-9]/ : /[a-z]/;
+          var j2 = i;
+          while (j2 < raw.length && re.test(raw[j2])) j2++;
+          for (var p = i; p < j2; p += 2) {
+            var e2 = Math.min(p + 2, j2);
+            toks.push({ k: e2 - p === 2 ? 'pair' : 'ch', t: raw.slice(p, e2), s: p, e: e2 });
+          }
+          i = j2;
+          continue;
+        }
+        if ((ch === '.' || ch === ',') && i + 1 < raw.length && isCloseAt(i + 1)) {
+          var qc = raw[i + 1];
+          var q = (qc === '"' || qc === '”') ? '”' : '’';
+          if (q === '”') dq = false; else sq = false;
+          toks.push({ k: 'pq', t: ch, q: q, s: i, e: i + 2 });
+          i += 2;
+          continue;
+        }
+        if (ch === '"' || ch === "'" || ch === '“' || ch === '‘' || ch === '”' || ch === '’') {
+          var dbl = (ch === '"' || ch === '“' || ch === '”');
+          var open;
+          if (ch === '“' || ch === '‘') open = true;
+          else if (ch === '”' || ch === '’') open = false;
+          else open = dbl ? !dq : !sq;
+          if (dbl) dq = open; else sq = open;
+          toks.push({ k: open ? 'qo' : 'qc', t: dbl ? (open ? '“' : '”') : (open ? '‘' : '’'), s: i, e: i + 1 });
+          i++;
+          continue;
+        }
+        if (ch === '?' || ch === '!') { toks.push({ k: 'qm', t: ch, s: i, e: i + 1 }); i++; continue; }
+        if (ch === '.') { toks.push({ k: 'dot', s: i, e: i + 1 }); i++; continue; }
+        if (ch === ',') { toks.push({ k: 'comma', s: i, e: i + 1 }); i++; continue; }
+        toks.push({ k: 'ch', t: ch, s: i, e: i + 1 });
+        i++;
+      }
+      return toks;
+    }
+
+    // 줄 첫 칸에 오면 안 되는 문장 부호 → 앞줄 칸 밖(오른쪽 여백)에 찍는다
+    var NO_LINE_START_KINDS = { dot: 1, comma: 1, qm: 1, qc: 1, pq: 1 };
+    var NO_LINE_START_CHARS = ')」』';
+
+    var lastLayout = null;
+
+    // 마침표·쉼표 뒤: 붙여 쓰기(원고지 원칙) / 띄어 쓰기(입력한 대로)
+    var PUNCT_ATTACH = true;
+    try { if (localStorage.getItem('wongoji-punct') === 'space') PUNCT_ATTACH = false; } catch (e) {}
+    var punctSelect = document.getElementById('punctSelect');
+    punctSelect.value = PUNCT_ATTACH ? 'attach' : 'space';
+    punctSelect.addEventListener('change', function () {
+      PUNCT_ATTACH = punctSelect.value === 'attach';
+      try { localStorage.setItem('wongoji-punct', punctSelect.value); } catch (e) {}
+      recompute();
+    });
+
+    function layout(raw) {
+      var toks = tokenize(raw);
+      var out = new Array(TOTAL).fill(null);   // 칸마다 {tok, part}
+      var margin = [];
+      for (var vm = 0; vm < TOTAL_ROWS; vm++) margin.push(null);
+      var idx = 0;
+      var wrapped = false;     // 앞 칸이 줄 끝까지 채워져 자연스럽게 다음 줄로 넘어온 상태
+      var needBlank = false;   // 물음표·느낌표·줄임표 다음 한 칸 띄우기
+      var skipSpace = false;   // 마침표·쉼표 다음 띄어쓰기는 칸을 비우지 않는다 (붙여 쓰기 설정)
+      var overflowAt = -1;
+      var firstCell = [];      // 토큰마다 처음 놓인 칸 번호
+
+      function place(tok, part) {
+        out[idx] = { tok: tok, part: part };
+        idx++;
+        wrapped = (idx % TOTAL_COLS === 0);
+      }
+      function doSpace(tok) {
+        var col = idx % TOTAL_COLS;
+        var row = Math.floor(idx / TOTAL_COLS);
+        if (col === 0 && wrapped) {
+          // 띄어쓰기가 다음 줄 첫 칸에 오게 되면 칸을 비우지 않고 앞줄 칸 밖에 V표
+          if (!margin[row - 1]) margin[row - 1] = { v: true, tok: tok };
+          wrapped = false;
+          return true;
+        }
+        if (idx >= TOTAL) return false;
+        place(tok || null, 0);
+        return true;
+      }
+
+      for (var t = 0; t < toks.length; t++) {
+        var tok = toks[t];
+        firstCell[t] = idx;
+
+        if (skipSpace) {
+          skipSpace = false;
+          if (tok.k === 'sp') continue;
+        }
+        if (needBlank) {
+          needBlank = false;
+          if (tok.k !== 'sp' && tok.k !== 'nl' && tok.k !== 'qc') {
+            if (!doSpace(null)) { overflowAt = tok.s; break; }
+            firstCell[t] = idx;
+          }
+        }
+
+        var punct = NO_LINE_START_KINDS[tok.k] || (tok.k === 'ch' && NO_LINE_START_CHARS.indexOf(tok.t) !== -1);
+        if (punct && idx > 0 && idx % TOTAL_COLS === 0 && wrapped) {
+          var mr = idx / TOTAL_COLS - 1;
+          if (!margin[mr]) {
+            margin[mr] = { tok: tok };
+            firstCell[t] = -1 - mr;
+            if (tok.k === 'qm') needBlank = true;
+            if (PUNCT_ATTACH && (tok.k === 'dot' || tok.k === 'comma')) skipSpace = true;
+            continue;
+          }
+        }
+
+        if (tok.k === 'nl') {
+          if (idx >= TOTAL) { overflowAt = tok.s; break; }
+          var rem = idx % TOTAL_COLS;
+          if (!(rem === 0 && wrapped)) idx += (rem === 0) ? TOTAL_COLS : (TOTAL_COLS - rem);
+          wrapped = false;
+          continue;
+        }
+        if (tok.k === 'sp') {
+          if (!doSpace(tok)) { overflowAt = tok.s; break; }
+          continue;
+        }
+        var need = tok.k === 'ell' ? 2 : 1;
+        if (idx + need > TOTAL) { overflowAt = tok.s; break; }
+        for (var pp = 0; pp < need; pp++) place(tok, pp);
+        if (tok.k === 'qm' || tok.k === 'ell') needBlank = true;
+        if (PUNCT_ATTACH && (tok.k === 'dot' || tok.k === 'comma')) skipSpace = true;
+      }
+      return { toks: toks, out: out, margin: margin, end: idx, overflowAt: overflowAt, firstCell: firstCell };
+    }
+
+    function paintCell(co, item) {
+      var el = co.el;
+      el.className = el.classList.contains('mcell') ? 'cell mcell' : 'cell';
+      co.span.textContent = '';
+      co.aux.textContent = '';
+      if (!item || !item.tok || item.tok.k === 'sp') return false;
+      var tok = item.tok;
+      switch (tok.k) {
+        case 'dot': el.classList.add('period'); break;
+        case 'comma': el.classList.add('comma'); co.aux.textContent = ','; break;
+        case 'pq':
+          el.classList.add('q-tr');
+          co.span.textContent = tok.q;
+          if (tok.t === '.') el.classList.add('period');
+          else { el.classList.add('comma'); co.aux.textContent = ','; }
+          break;
+        case 'qo': el.classList.add('q-tr'); co.span.textContent = tok.t; break;
+        case 'qc': el.classList.add('q-tl'); co.span.textContent = tok.t; break;
+        case 'ell': el.classList.add('ell'); co.span.textContent = '…'; break;
+        case 'pair': el.classList.add('pair'); co.span.textContent = tok.t; break;
+        default: co.span.textContent = tok.t;
+      }
+      return true;
+    }
+
+    function recompute(e) {
+      // 입력할 때만 넘치는 글자를 잘라 낸다. 줄 수를 줄였을 때는 입력창 글은
+      // 그대로 두어서, 다시 줄 수를 늘리면 원래 글이 돌아오게 한다.
+      var fromInput = !!(e && e.type === 'input');
+      var raw = typer.value;
+      var L = layout(raw);
+
+      if (L.overflowAt >= 0 && !composing && fromInput) {
+        typer.value = raw.slice(0, L.overflowAt);
+        raw = typer.value;
+        L = layout(raw);
+      }
+      lastLayout = L;
+
+      // 원고지 커서는 입력창의 실제 편집 위치(캐럿)를 따라간다.
+      var selS = typer.selectionStart, selE = typer.selectionEnd;
+      if (selS === null || selS === undefined) { selS = selE = raw.length; }
+      var cursorPos = L.end;
+      for (var t = 0; t < L.toks.length; t++) {
+        if (L.toks[t].s >= selS) {
+          var fc = L.firstCell[t];
+          if (fc !== undefined && fc >= 0) cursorPos = fc;
+          else if (fc !== undefined) cursorPos = (-fc) * TOTAL_COLS;
+          break;
+        }
+      }
+      cursorPos = Math.min(cursorPos, TOTAL);
+      var hasSel = selE > selS;
+
+      var filledCount = 0;
+      for (var k = 0; k < TOTAL; k++) {
+        var item = L.out[k];
+        var co = cells[k];
+        if (paintCell(co, item)) filledCount++;
+        var selHere = hasSel && item && item.tok && item.tok.s < selE && item.tok.e > selS;
+        co.el.classList.toggle('selected', !!(isFocused && selHere));
+        co.el.classList.toggle('cursor', isFocused && !hasSel && k === cursorPos);
+      }
+      for (var r = 0; r < TOTAL_ROWS; r++) {
+        var m = L.margin[r];
+        vmarkRows[r].v.textContent = (m && m.v) ? 'V' : '';
+        paintCell(vmarkRows[r].m, (m && !m.v) ? m : null);
+        var mSel = hasSel && m && m.tok && m.tok.s < selE && m.tok.e > selS;
+        vmarkRows[r].m.el.classList.toggle('selected', !!(isFocused && mSel));
+      }
+      counterEl.textContent = filledCount + '/' + TOTAL;
+
+      // 스크롤 보기에서는 지금 쓰는 칸이 화면 밖으로 나가지 않게 따라간다.
+      if (VIEW_MODE === 'scroll' && isFocused && cells[cursorPos]) {
+        var ce = cells[cursorPos].el;
+        var wr = paperWrapEl.getBoundingClientRect();
+        var cr = ce.getBoundingClientRect();
+        if (cr.bottom > wr.bottom) paperWrapEl.scrollTop += cr.bottom - wr.bottom + 8;
+        else if (cr.top < wr.top) paperWrapEl.scrollTop -= wr.top - cr.top + 8;
+      }
+    }
+
+    // ---- 원고지 칸을 누르면 그 칸의 글자를 골라서 바로 고칠 수 있게 한다 ----
+    function selectRange(s0, e0) {
+      typer.focus();
+      typer.setSelectionRange(s0, e0);
+      recompute();
+    }
+    paperEl.addEventListener('click', function (ev) {
+      var raw = typer.value;
+      var L = lastLayout || layout(raw);
+      var cellEl = ev.target.closest('.cell');
+      if (cellEl && cellEl.classList.contains('mcell')) {
+        var row = parseInt(cellEl.parentNode.getAttribute('data-row'), 10);
+        var m = L.margin[row];
+        if (m && m.tok) { selectRange(m.tok.s, m.tok.e); return; }
+      }
+      var vrowEl = ev.target.closest('.vrow');
+      if (vrowEl && !cellEl) {
+        var m2 = L.margin[parseInt(vrowEl.getAttribute('data-row'), 10)];
+        if (m2 && m2.tok) { selectRange(m2.tok.s, m2.tok.e); return; }
+      }
+      if (!cellEl || !cellEl.hasAttribute('data-idx')) { selectRange(raw.length, raw.length); return; }
+      var k = parseInt(cellEl.getAttribute('data-idx'), 10);
+      var item = L.out[k];
+      if (item && item.tok) { selectRange(item.tok.s, item.tok.e); return; }
+      // 빈칸(자동으로 띄운 칸이나 글 뒤 빈 칸)이면 그 다음 글자 앞에 커서를 둔다.
+      for (var n = k + 1; n < TOTAL; n++) {
+        if (L.out[n] && L.out[n].tok) { selectRange(L.out[n].tok.s, L.out[n].tok.s); return; }
+      }
+      selectRange(raw.length, raw.length);
+    });
+
+    // 별도 창을 열어 다른 모니터로 옮기는 방식은 학교 PC 환경(네트워크 제한,
+    // 팝업/권한 정책 등)에서 미리보기가 멈추는 문제가 있어 안정성을 위해
+    // 걷어냈다. 지금은 현재 창에서 바로 인쇄하는 가장 단순하고 확실한
+    // 방식을 쓴다 — 인쇄 대화상자는 지금 이 창이 떠 있는 모니터에 나타나므로,
+    // 다른 모니터에 띄우고 싶다면 인쇄 전에 이 창을 그 모니터로 옮겨두면 된다.
+    // ---- 인쇄: 크기 맞추기(가로폭 맞춤 / 한 장에 다 넣기)와 용지 방향을 고른다 ----
+    var printDialog = document.getElementById('printDialog');
+    var printSummary = document.getElementById('printSummary');
+    var printView = document.getElementById('printView');
+    var PAGE_MARGIN = 15;  // mm, 프린터가 가장자리를 못 찍는 것을 생각해 넉넉히
+    var HEAD_H = 14;       // mm, 첫 장 위쪽 제목·날짜 자리
+    var printOpts = { fit: 'width', orient: 'landscape', ink: 'dark' };
+    try {
+      var savedP = JSON.parse(localStorage.getItem('wongoji-print') || '{}');
+      if (savedP.fit === 'one' || savedP.fit === 'width') printOpts.fit = savedP.fit;
+      if (savedP.orient === 'portrait' || savedP.orient === 'landscape') printOpts.orient = savedP.orient;
+      if (savedP.ink === 'trace' || savedP.ink === 'dark') printOpts.ink = savedP.ink;
+    } catch (e) {}
+
+    function planPrint() {
+      var pw = printOpts.orient === 'landscape' ? 297 : 210;
+      var ph = printOpts.orient === 'landscape' ? 210 : 297;
+      var W = pw - PAGE_MARGIN * 2 - 2;
+      var H = ph - PAGE_MARGIN * 2 - 3;
+      var c = W / (TOTAL_COLS + 0.6);
+      if (printOpts.fit === 'one') c = Math.min(c, (H - HEAD_H) / TOTAL_ROWS);
+      c = Math.floor(c * 10) / 10;
+      var pages = [];
+      var start = 0;
+      while (start < TOTAL_ROWS) {
+        var avail = pages.length === 0 ? H - HEAD_H : H;
+        var n = Math.max(1, Math.floor(avail / c));
+        pages.push([start, Math.min(TOTAL_ROWS, start + n)]);
+        start += n;
+      }
+      return { cell: c, pages: pages };
+    }
+
+    function updateSummary() {
+      var plan = planPrint();
+      printSummary.textContent = TOTAL_ROWS + '줄 원고지 → 칸 한 변 ' + plan.cell.toFixed(1) + 'mm, 종이 ' + plan.pages.length + '장' +
+        (printOpts.ink === 'trace' ? ' · 글씨는 흐리게' : '');
+    }
+
+    function buildPrintView() {
+      var plan = planPrint();
+      printStyle.textContent = '@page { size: A4 ' + printOpts.orient + '; margin: ' + PAGE_MARGIN + 'mm; }';
+      printView.innerHTML = '';
+      printView.classList.toggle('trace', printOpts.ink === 'trace');
+      printView.style.setProperty('--cell', plan.cell + 'mm');
+      plan.pages.forEach(function (range, pi) {
+        var page = document.createElement('div');
+        page.className = 'pv-page';
+        if (pi === 0) {
+          var head = document.createElement('div');
+          head.className = 'pv-head';
+          var t = document.createElement('span');
+          t.className = 'pv-title';
+          t.textContent = titleInput.value;
+          var d = document.createElement('span');
+          d.className = 'pv-date';
+          d.textContent = todayDateEl.textContent;
+          head.appendChild(t);
+          head.appendChild(d);
+          page.appendChild(head);
+        }
+        var row = document.createElement('div');
+        row.className = 'pv-row';
+        var g = document.createElement('div');
+        g.className = 'grid';
+        g.style.setProperty('--rows', String(range[1] - range[0]));
+        var vm = document.createElement('div');
+        vm.className = 'vmarks';
+        for (var r = range[0]; r < range[1]; r++) {
+          for (var cc = 0; cc < TOTAL_COLS; cc++) {
+            var clone = cells[r * TOTAL_COLS + cc].el.cloneNode(true);
+            clone.classList.remove('cursor');
+            clone.classList.remove('selected');
+            g.appendChild(clone);
+          }
+          var vclone = vmarkBoxes[r].cloneNode(true);
+          var selM = vclone.querySelector('.selected');
+          if (selM) selM.classList.remove('selected');
+          vm.appendChild(vclone);
+        }
+        row.appendChild(g);
+        row.appendChild(vm);
+        page.appendChild(row);
+        printView.appendChild(page);
+      });
+    }
+
+    function openPrintDialog() {
+      document.querySelector('input[name="pfit"][value="' + printOpts.fit + '"]').checked = true;
+      document.querySelector('input[name="porient"][value="' + printOpts.orient + '"]').checked = true;
+      document.querySelector('input[name="pink"][value="' + printOpts.ink + '"]').checked = true;
+      updateSummary();
+      printDialog.classList.add('open');
+      document.getElementById('printGo').focus();
+    }
+    function closePrintDialog() {
+      printDialog.classList.remove('open');
+    }
+    Array.prototype.forEach.call(document.querySelectorAll('input[name="pfit"], input[name="porient"], input[name="pink"]'), function (inp) {
+      inp.addEventListener('change', function () {
+        if (inp.name === 'pfit') printOpts.fit = inp.value;
+        else if (inp.name === 'porient') printOpts.orient = inp.value;
+        else printOpts.ink = inp.value;
+        try { localStorage.setItem('wongoji-print', JSON.stringify(printOpts)); } catch (e) {}
+        updateSummary();
+      });
+    });
+    document.getElementById('printCancel').addEventListener('click', closePrintDialog);
+    printDialog.addEventListener('click', function (e) { if (e.target === printDialog) closePrintDialog(); });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && printDialog.classList.contains('open')) closePrintDialog();
+    });
+    document.getElementById('printGo').addEventListener('click', function () {
+      closePrintDialog();
+      buildPrintView();
+      setTimeout(function () { window.print(); }, 50);
+    });
+    // Ctrl+P로 바로 인쇄해도 마지막에 고른 설정대로 인쇄되게 한다.
+    window.addEventListener('beforeprint', buildPrintView);
+
+    function handlePrint() {
+      openPrintDialog();
+    }
+
+    // ---- 저절로 저장하기: 쓰던 글과 제목을 이 브라우저에 저장해 둔다 ----
+    function saveNow() {
+      try {
+        localStorage.setItem('wongoji-text', typer.value);
+        localStorage.setItem('wongoji-title', titleInput.value);
+      } catch (e) {}
+    }
+    try {
+      var savedText = localStorage.getItem('wongoji-text');
+      var savedTitle = localStorage.getItem('wongoji-title');
+      if (savedText) typer.value = savedText;
+      if (savedTitle) titleInput.value = savedTitle;
+    } catch (e) {}
+    typer.addEventListener('input', function (e) { recompute(e); saveNow(); });
+    titleInput.addEventListener('input', saveNow);
+    viewSelect.addEventListener('change', function () {
+      VIEW_MODE = viewSelect.value;
+      try { localStorage.setItem('wongoji-view', VIEW_MODE); } catch (e) {}
+      paperWrapEl.scrollTop = 0;
+      fitGrid();
+      recompute();
+    });
+    rowsSelect.addEventListener('change', function () {
+      TOTAL_ROWS = parseInt(rowsSelect.value, 10);
+      try { localStorage.setItem('wongoji-rows', String(TOTAL_ROWS)); } catch (e) {}
+      buildGrid();
+      fitGrid();
+      recompute();
+    });
+    typer.addEventListener('compositionstart', function () { composing = true; });
+    typer.addEventListener('compositionend', function () { composing = false; recompute(); });
+    typer.addEventListener('focus', function () { isFocused = true; recompute(); });
+    typer.addEventListener('blur', function () { isFocused = false; recompute(); });
+    // 텍스트 변경 없이 클릭이나 방향키로 캐럿(편집 위치)만 옮겨도
+    // 원고지의 커서 표시가 함께 따라가도록 갱신한다.
+    typer.addEventListener('click', recompute);
+    typer.addEventListener('keyup', recompute);
+    typer.addEventListener('select', recompute);
+
+
+    // 전체 지우기는 저장된 글까지 지우므로, 잠깐 동안 '되돌리기'로 바뀌어 실수를 막는다.
+    var undoText = null, undoTimer = null;
+    clearBtn.addEventListener('click', function () {
+      if (undoText !== null) {
+        typer.value = undoText;
+        undoText = null;
+        clearTimeout(undoTimer);
+        clearBtn.textContent = '전체 지우기';
+      } else {
+        if (!typer.value) { typer.focus(); return; }
+        undoText = typer.value;
+        typer.value = '';
+        clearBtn.textContent = '↶ 되돌리기';
+        undoTimer = setTimeout(function () {
+          undoText = null;
+          clearBtn.textContent = '전체 지우기';
+        }, 8000);
+      }
+      saveNow();
+      typer.focus();
+      typer.setSelectionRange(typer.value.length, typer.value.length);
+      recompute();
+    });
+
+    printBtn.addEventListener('click', handlePrint);
+
+    // ---- 예문 보기: 원고지 규칙이 모두 담긴 예문을 한 글자씩 써 보인다 ----
+    var EXAMPLE_TITLE = '오이샐러드';
+    var EXAMPLE_TEXT = [
+      ' 11시 25분, 급식에 오이샐러드가 나왔다. 초록색 오이들이 맛없어 보였다.',
+      ' ‘으…… 먹기 싫다.’',
+      ' 그때 짝꿍인 민지가 말했다.',
+      ' “먹어 봐. 맛있어!”',
+      ' 나는 용기를 내어 한 입 먹어 보았다. 어떤 맛일까? 아삭아삭하고 새콤달콤했다. 나도 모르게 소리쳤다.',
+      ' “와, 맛있다.”',
+      ' ‘다음에도 꼭 먹어야지!’'
+    ].join('\n');
+    var EXAMPLE_ROWS = 12;
+    var STEP_MS = 160;       // 한 글자가 나타나는 간격
+    var exampleBtn = document.getElementById('exampleBtn');
+    var playTimer = null, playPos = 0, prevBeforeExample = '';
+
+    function finishExample() {
+      clearTimeout(playTimer);
+      playTimer = null;
+      typer.readOnly = false;
+      typer.value = EXAMPLE_TEXT;
+      typer.setSelectionRange(typer.value.length, typer.value.length);
+      exampleBtn.textContent = '예문 보기';
+      saveNow();
+      recompute();
+      // 쓰던 글이 있었다면 잠깐 동안 '되돌리기'로 되찾을 수 있게 한다.
+      if (prevBeforeExample && prevBeforeExample !== EXAMPLE_TEXT) {
+        undoText = prevBeforeExample;
+        clearBtn.textContent = '↶ 되돌리기';
+        clearTimeout(undoTimer);
+        undoTimer = setTimeout(function () {
+          undoText = null;
+          clearBtn.textContent = '전체 지우기';
+        }, 8000);
+      }
+    }
+    function stepExample() {
+      // 띄어쓰기와 줄 바꿈은 기다리지 않고 다음 글자와 함께 나타낸다.
+      playPos++;
+      while (playPos < EXAMPLE_TEXT.length && /[ \n]/.test(EXAMPLE_TEXT[playPos - 1])) playPos++;
+      typer.value = EXAMPLE_TEXT.slice(0, playPos);
+      typer.setSelectionRange(playPos, playPos);
+      recompute();
+      if (playPos >= EXAMPLE_TEXT.length) { finishExample(); return; }
+      playTimer = setTimeout(stepExample, STEP_MS);
+    }
+    exampleBtn.addEventListener('click', function () {
+      if (playTimer) { finishExample(); return; }   // 재생 중에 누르면 바로 끝까지 보여 준다
+      prevBeforeExample = typer.value;
+      if (TOTAL_ROWS < EXAMPLE_ROWS) {
+        TOTAL_ROWS = EXAMPLE_ROWS;
+        rowsSelect.value = String(TOTAL_ROWS);
+        try { localStorage.setItem('wongoji-rows', String(TOTAL_ROWS)); } catch (e) {}
+        buildGrid();
+        fitGrid();
+      }
+      if (!titleInput.value) titleInput.value = EXAMPLE_TITLE;
+      typer.value = '';
+      typer.readOnly = true;
+      typer.focus();
+      paperWrapEl.scrollTop = 0;
+      playPos = 0;
+      exampleBtn.textContent = '■ 바로 보기';
+      recompute();
+      playTimer = setTimeout(stepExample, STEP_MS);
+    });
+
+    fullscreenBtn.addEventListener('click', function () {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(function () {});
+        fullscreenBtn.textContent = '전체화면 해제';
+      } else {
+        document.exitFullscreen().catch(function () {});
+      }
+    });
+
+    document.addEventListener('fullscreenchange', function () {
+      fullscreenBtn.textContent = document.fullscreenElement ? '전체화면 해제' : '전체화면';
+    });
+
+    recompute();
+    typer.focus();
+    typer.setSelectionRange(typer.value.length, typer.value.length);
+    recompute();
+  })();
+</script>
+</body>
+</html>
